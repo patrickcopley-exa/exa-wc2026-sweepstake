@@ -1,0 +1,15 @@
+{
+  "name": "exa-networks-wc2026-sweepstake",
+  "version": "1.0.0",
+  "description": "Exa Networks 2026 World Cup Sweepstake",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

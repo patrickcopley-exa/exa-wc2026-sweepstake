@@ -383,13 +383,34 @@
 /* ═══════════════════════════════════════════════
    PRIZES
 ═══════════════════════════════════════════════ */
-const PRIZES = {
-  winner:    { label:"Tournament winner",   emoji:"🏆", amount:50, cls:"h-gold"   },
-  runnerUp:  { label:"Runner-up",           emoji:"🥈", amount:20, cls:"h-silver" },
-  topScorer: { label:"Top scoring team",    emoji:"⚽", amount:10, cls:"h-cyan"   },
-  conceded:  { label:"Most goals conceded", emoji:"🔴", amount:10, cls:"h-red"    },
-  redCard:   { label:"First red card",      emoji:"🟥", amount:6,  cls:"h-red"    },
+// Base prize ratios — scale to actual pot size
+const PRIZE_BASE = { winner:50, runnerUp:20, topScorer:10, conceded:10, redCard:6 };
+const PRIZE_BASE_TOTAL = 96; // sum of above
+
+const PRIZE_META = {
+  winner:    { label:"Tournament winner",   emoji:"🏆", cls:"h-gold"   },
+  runnerUp:  { label:"Runner-up",           emoji:"🥈", cls:"h-silver" },
+  topScorer: { label:"Top scoring team",    emoji:"⚽", cls:"h-cyan"   },
+  conceded:  { label:"Most goals conceded", emoji:"🔴", cls:"h-red"    },
+  redCard:   { label:"First red card",      emoji:"🟥", cls:"h-red"    },
 };
+
+function computePrizes(){
+  const pot = state.participants.length * 2;
+  if(pot === 0) return Object.fromEntries(Object.entries(PRIZE_META).map(([k,v])=>([k,{...v,amount:PRIZE_BASE[k]}])));
+  const scale = pot / PRIZE_BASE_TOTAL;
+  const amounts = {};
+  let sum = 0;
+  for(const k of ['runnerUp','topScorer','conceded','redCard']){
+    amounts[k] = Math.round(PRIZE_BASE[k] * scale);
+    sum += amounts[k];
+  }
+  amounts.winner = pot - sum; // winner gets remainder so prizes sum to exact pot
+  return Object.fromEntries(Object.entries(PRIZE_META).map(([k,v])=>([k,{...v,amount:amounts[k]}])));
+}
+
+// PRIZES is computed — always use computePrizes() for current amounts
+const PRIZES = PRIZE_META; // kept for backward compat, use computePrizes() for amounts
 
 /* ═══════════════════════════════════════════════
    OFFICIAL FIFA WORLD CUP 2026 GROUPS
@@ -603,12 +624,14 @@ async function addParticipant(pot){
 ═══════════════════════════════════════════════ */
 function renderPotBar(){
   const count = state.participants.length;
-  const total = Object.values(PRIZES).reduce((s,p)=>s+p.amount,0);
+  const pot   = count * 2;
+  const prizes = computePrizes();
+  const total = Object.values(prizes).reduce((s,p)=>s+p.amount,0);
   document.getElementById("pot-bar-section").innerHTML = `
     <div class="pot-bar">
       <div class="pot-item"><div class="pot-label">Entries</div><div class="pot-value">${count}</div></div>
       <div class="pot-sep"></div>
-      <div class="pot-item"><div class="pot-label">Pot collected</div><div class="pot-value">£${count*2}</div></div>
+      <div class="pot-item"><div class="pot-label">Pot collected</div><div class="pot-value">£${pot}</div></div>
       <div class="pot-sep"></div>
       <div class="pot-item"><div class="pot-label">Total prizes</div><div class="pot-value">£${total}</div></div>
       <div class="pot-sep"></div>
@@ -616,29 +639,63 @@ function renderPotBar(){
     </div>`;
 }
 
+// Find owner of a team — returns participant or null
+function teamOwner(team){ return team ? state.participants.find(p=>p.team===team)||null : null; }
+
+// Roll over to next participant who owns a team in this tournament
+// If winning team has no owner, find the next best team's owner
+function resolveWinner(teamField, orderedTeams){
+  if(!teamField) return {team:null, participant:null, rolledOver:false};
+  const direct = teamOwner(teamField);
+  if(direct) return {team:teamField, participant:direct, rolledOver:false};
+  // Roll over — find next team in ordered list that has an owner
+  for(const t of orderedTeams){
+    if(t === teamField) continue;
+    const p = teamOwner(t);
+    if(p) return {team:t, participant:p, rolledOver:true, original:teamField};
+  }
+  return {team:teamField, participant:null, rolledOver:false};
+}
+
 function renderPrizes(){
-  const wP  = state.participants.find(p=>p.team===state.winner);
-  const rP  = state.participants.find(p=>p.team===state.runnerUp);
-  const gP  = state.participants.find(p=>p.team===state.topScorerTeam);
-  const cP  = state.participants.find(p=>p.team===state.mostConcededTeam);
+  const prizes = computePrizes();
+
+  // Build ordered team lists for rollover (by current standings)
+  const allTeams = state.participants.map(p=>p.team);
+  const orderedByGoals = state.groups.length
+    ? state.groups.flatMap(g=>[...g.teams].sort((a,b)=>b.gf-a.gf)).map(t=>t.team)
+    : allTeams;
+  const orderedByConceded = state.groups.length
+    ? state.groups.flatMap(g=>[...g.teams].sort((a,b)=>b.ga-a.ga)).map(t=>t.team)
+    : allTeams;
+
   const rcTeam = state.firstRedCard?(state.firstRedCard.match(/\(([^)]+)\)/)?.[1]||""):"";
-  const rcP = rcTeam?state.participants.find(p=>p.team===rcTeam):null;
+
   const cards = [
-    {key:"winner",   p:wP,  w:state.winner,          raw:false},
-    {key:"runnerUp", p:rP,  w:state.runnerUp,         raw:false},
-    {key:"topScorer",p:gP,  w:state.topScorerTeam,    raw:false},
-    {key:"conceded", p:cP,  w:state.mostConcededTeam, raw:false},
-    {key:"redCard",  p:rcP, w:state.firstRedCard,      raw:true},
+    { key:"winner",    team:state.winner,          ordered:orderedByGoals,    raw:false },
+    { key:"runnerUp",  team:state.runnerUp,         ordered:orderedByGoals,    raw:false },
+    { key:"topScorer", team:state.topScorerTeam,    ordered:orderedByGoals,    raw:false },
+    { key:"conceded",  team:state.mostConcededTeam, ordered:orderedByConceded, raw:false },
+    { key:"redCard",   team:rcTeam,                 ordered:allTeams,          raw:true  },
   ];
+
   document.getElementById("prize-strip").innerHTML = cards.map(c=>{
-    const pr=PRIZES[c.key];
-    return `<div class="prize-card ${c.w?pr.cls:''}">
+    const pr = prizes[c.key];
+    const res = resolveWinner(c.team, c.ordered);
+    const hasOutcome = !!c.team;
+    let teamDisplay = c.raw ? state.firstRedCard : (c.team ? tf(c.team)+c.team : '');
+    return `<div class="prize-card ${hasOutcome?pr.cls:''}">
       <div class="prize-emoji">${pr.emoji}</div>
       <div class="prize-cat">${pr.label}</div>
       <div class="prize-amount">£${pr.amount}</div>
-      ${c.w
-        ?`<div class="prize-winner">${c.p?c.p.name:"No participant"}</div><div class="prize-team">${c.raw?c.w:tf(c.w)+c.w}</div>`
-        :`<div class="prize-empty">Not yet decided</div>`}
+      ${hasOutcome
+        ? res.rolledOver
+          ? `<div class="prize-winner" style="color:var(--gold-dark)">${res.participant?res.participant.name:"No participant"}</div>
+             <div class="prize-team">${tf(res.team)}${res.team}</div>
+             <div style="font-size:10px;color:var(--grey);margin-top:2px;font-style:italic">Rolled over from ${tf(res.original)}${res.original}</div>`
+          : `<div class="prize-winner">${res.participant?res.participant.name:"No participant"}</div>
+             <div class="prize-team">${teamDisplay}</div>`
+        : `<div class="prize-empty">Not yet decided</div>`}
     </div>`;
   }).join("");
 }
@@ -659,15 +716,21 @@ function renderParticipants(){
   if(!state.participants.length){el.innerHTML='<div class="empty">No participants yet — go to <strong>Manage</strong> to add participants and draw their teams.</div>';return;}
   const rcTeam=state.firstRedCard?(state.firstRedCard.match(/\(([^)]+)\)/)?.[1]||""):"";
   el.innerHTML=`<div class="pgrid">`+state.participants.map(p=>{
-    const isW=p.team===state.winner,isR=p.team===state.runnerUp;
-    const isG=p.team===state.topScorerTeam,isC=p.team===state.mostConcededTeam,isRC=rcTeam&&p.team===rcTeam;
-    const winnings=(isW?50:0)+(isR?20:0)+(isG?10:0)+(isC?10:0)+(isRC?6:0);
+    const prizes=computePrizes();
+    // Check direct win and rollover
+    const rcTeamInner=rcTeam;
+    const isW=p.team===state.winner||(!teamOwner(state.winner)&&state.winner&&resolveWinner(state.winner,[p.team]).participant?.name===p.name&&resolveWinner(state.winner,[p.team]).team===p.team);
+    const isR=p.team===state.runnerUp||(!teamOwner(state.runnerUp)&&state.runnerUp&&resolveWinner(state.runnerUp,[p.team]).participant?.name===p.name&&resolveWinner(state.runnerUp,[p.team]).team===p.team);
+    const isG=p.team===state.topScorerTeam;
+    const isC=p.team===state.mostConcededTeam;
+    const isRC=rcTeamInner&&p.team===rcTeamInner;
+    const winnings=(isW?prizes.winner.amount:0)+(isR?prizes.runnerUp.amount:0)+(isG?prizes.topScorer.amount:0)+(isC?prizes.conceded.amount:0)+(isRC?prizes.redCard.amount:0);
     const badges=[
-      isW?'<span class="pbadge bw">🏆 £50</span>':"",
-      isR?'<span class="pbadge brr">🥈 £20</span>':"",
-      isG?'<span class="pbadge bg">⚽ £10</span>':"",
-      isC?'<span class="pbadge bc">🔴 £10</span>':"",
-      isRC?'<span class="pbadge brc">🟥 £6</span>':"",
+      isW?`<span class="pbadge bw">🏆 £${prizes.winner.amount}</span>`:"",
+      isR?`<span class="pbadge brr">🥈 £${prizes.runnerUp.amount}</span>`:"",
+      isG?`<span class="pbadge bg">⚽ £${prizes.topScorer.amount}</span>`:"",
+      isC?`<span class="pbadge bc">🔴 £${prizes.conceded.amount}</span>`:"",
+      isRC?`<span class="pbadge brc">🟥 £${prizes.redCard.amount}</span>`:"",
     ].filter(Boolean).join("");
     return `<div class="pcard ${isW?"pw":isR?"pr":""}">
       <div class="pavatar">${initials(p.name)}</div>

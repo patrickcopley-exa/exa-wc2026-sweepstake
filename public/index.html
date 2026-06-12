@@ -446,7 +446,7 @@ let liveGroups = OFFICIAL_GROUPS.map(g=>({
 }));
 
 /* Shared state — loaded from server */
-let state = {"participants": [{"name": "Lucie", "team": "Cape Verde"}, {"name": "Lucie", "team": "Haiti"}, {"name": "George", "team": "Croatia"}, {"name": "George", "team": "Czech Republic"}, {"name": "Miel", "team": "Panama"}, {"name": "Miel", "team": "South Korea"}, {"name": "Nick", "team": "England"}, {"name": "Nick", "team": "Qatar"}, {"name": "Michelle", "team": "Cura\u00e7ao"}, {"name": "Rachel", "team": "Uzbekistan"}, {"name": "Rachel", "team": "Ecuador"}, {"name": "Corey", "team": "New Zealand"}, {"name": "Corey", "team": "Iran"}, {"name": "Charlie", "team": "DR Congo"}, {"name": "Charlie", "team": "Jordan"}, {"name": "Michael", "team": "Austria"}, {"name": "Michael", "team": "Argentina"}, {"name": "Jo", "team": "Spain"}, {"name": "Jo", "team": "Mexico"}, {"name": "Olivia", "team": "Germany"}, {"name": "Olivia", "team": "Iraq"}, {"name": "Patrick", "team": "Brazil"}, {"name": "Lucie", "team": "Scotland"}, {"name": "Charlie", "team": "Ivory Coast"}, {"name": "Olivia", "team": "Netherlands"}, {"name": "Jacob", "team": "USA"}, {"name": "Corey", "team": "Japan"}, {"name": "Henry", "team": "France"}, {"name": "Isobelle", "team": "Senegal"}, {"name": "George", "team": "Norway"}, {"name": "Patrick", "team": "Morocco"}, {"name": "Susan", "team": "Canada"}, {"name": "Susan", "team": "Australia"}], "winner": "", "runnerUp": "", "firstRedCard": "", "topScorerTeam": "", "mostConcededTeam": "", "scores": [], "groups": [], "scoresUpdated": "", "standingsUpdated": ""};
+let state = {"participants": [{"name": "Lucie", "team": "Cape Verde"}, {"name": "Lucie", "team": "Haiti"}, {"name": "George", "team": "Croatia"}, {"name": "George", "team": "Czech Republic"}, {"name": "Miel", "team": "Panama"}, {"name": "Miel", "team": "South Korea"}, {"name": "Nick", "team": "England"}, {"name": "Nick", "team": "Qatar"}, {"name": "Michelle", "team": "Cura\u00e7ao"}, {"name": "Rachel", "team": "Uzbekistan"}, {"name": "Rachel", "team": "Ecuador"}, {"name": "Corey", "team": "New Zealand"}, {"name": "Corey", "team": "Iran"}, {"name": "Charlie", "team": "DR Congo"}, {"name": "Charlie", "team": "Jordan"}, {"name": "Michael", "team": "Austria"}, {"name": "Michael", "team": "Argentina"}, {"name": "Jo", "team": "Spain"}, {"name": "Jo", "team": "Mexico"}, {"name": "Olivia", "team": "Germany"}, {"name": "Olivia", "team": "Iraq"}, {"name": "Patrick", "team": "Brazil"}, {"name": "Lucie", "team": "Scotland"}, {"name": "Charlie", "team": "Ivory Coast"}, {"name": "Olivia", "team": "Netherlands"}, {"name": "Jacob", "team": "USA"}, {"name": "Corey", "team": "Japan"}, {"name": "Henry", "team": "France"}, {"name": "Isobelle", "team": "Senegal"}, {"name": "George", "team": "Norway"}, {"name": "Patrick", "team": "Morocco"}, {"name": "Susan", "team": "Canada"}, {"name": "Susan", "team": "Australia"}], "winner": "", "runnerUp": "", "firstRedCard": "", "topScorerTeam": "", "mostConcededTeam": "", "scores": [], "groups": [], "scoresUpdated": "", "standingsUpdated": "", "statsData": null, "statsUpdated": ""};
 
 /* ═══════════════════════════════════════════════
    SYNC DOT
@@ -483,10 +483,12 @@ async function loadState(){
         body: JSON.stringify(state)
       }).catch(()=>{});
     }
-    // Restore cached scores and standings if available
+    // Restore cached scores, standings and stats if available
     if(state.groups?.length){ liveGroups = state.groups; }
     setSyncStatus("ok");
     renderAll();
+    // Re-render prizes from cached stats so prize breakdown is always up to date
+    if(state.statsData){ renderPrizes(); renderParticipants(); }
   } catch(e){
     setSyncStatus("offline");
     console.error("Could not load state:", e);
@@ -524,6 +526,7 @@ function switchTab(name){
   if(name==="scores")     { if(state.scores?.length){ renderScores(state.scores); document.getElementById("upd-scores").textContent=state.scoresUpdated?"Updated "+state.scoresUpdated:"Click Refresh"; } }
   if(name==="standings")  { if(state.groups?.length){ liveGroups=state.groups; renderStandings(liveGroups); document.getElementById("upd-standings").textContent=state.standingsUpdated?"Live — "+state.standingsUpdated:"Click Refresh"; } }
   if(name==="knockout")   buildBracket();
+  if(name==="stats")      { if(state.statsData){ renderStats(state.statsData); document.getElementById("upd-stats").textContent=state.statsUpdated?"Updated "+state.statsUpdated:"Click Refresh"; } }
   if(name==="manage")     loadState();
 }
 
@@ -951,7 +954,10 @@ async function fetchStats(){
       if(newConc && state.mostConcededTeam!==newConc){state.mostConcededTeam=newConc;ch.mostConcededTeam=newConc;}
       if(Object.keys(ch).length) await saveState(ch);
     }
-    u.textContent="Updated "+new Date().toLocaleTimeString();
+    state.statsData = d;
+    state.statsUpdated = new Date().toLocaleTimeString();
+    u.textContent="Updated "+state.statsUpdated;
+    saveState({statsData:state.statsData, statsUpdated:state.statsUpdated}).catch(()=>{});
     renderStats(d);
     renderPotBar();
     renderPrizes();

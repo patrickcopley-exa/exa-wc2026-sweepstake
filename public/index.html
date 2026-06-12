@@ -401,13 +401,17 @@ function computePrizes(){
   const scale = pot / PRIZE_BASE_TOTAL;
   const amounts = {};
   let sum = 0;
+  // Round each prize to whole pounds — winner absorbs any remainder so total = pot exactly
   for(const k of ['runnerUp','topScorer','conceded','redCard']){
     amounts[k] = Math.round(PRIZE_BASE[k] * scale);
     sum += amounts[k];
   }
-  amounts.winner = pot - sum; // winner gets remainder so prizes sum to exact pot
+  amounts.winner = pot - sum;
   return Object.fromEntries(Object.entries(PRIZE_META).map(([k,v])=>([k,{...v,amount:amounts[k]}])));
 }
+
+// Format a number — whole pounds show as £X, pence show as £X.XX
+function fmt(n){ return Number.isInteger(n) ? '£'+n : '£'+n.toFixed(2); }
 
 // PRIZES is computed — always use computePrizes() for current amounts
 const PRIZES = PRIZE_META; // kept for backward compat, use computePrizes() for amounts
@@ -626,14 +630,14 @@ function renderPotBar(){
   const count = state.participants.length;
   const pot   = count * 2;
   const prizes = computePrizes();
-  const total = Object.values(prizes).reduce((s,p)=>s+p.amount,0);
+  const total = Math.round(Object.values(prizes).reduce((s,p)=>s+p.amount,0)*100)/100;
   document.getElementById("pot-bar-section").innerHTML = `
     <div class="pot-bar">
       <div class="pot-item"><div class="pot-label">Entries</div><div class="pot-value">${count}</div></div>
       <div class="pot-sep"></div>
       <div class="pot-item"><div class="pot-label">Pot collected</div><div class="pot-value">£${pot}</div></div>
       <div class="pot-sep"></div>
-      <div class="pot-item"><div class="pot-label">Total prizes</div><div class="pot-value">£${total}</div></div>
+      <div class="pot-item"><div class="pot-label">Total prizes</div><div class="pot-value">${fmt(total)}</div></div>
       <div class="pot-sep"></div>
       <div class="pot-item"><div class="pot-label">Per entry</div><div class="pot-value">£2</div></div>
     </div>`;
@@ -711,24 +715,22 @@ function renderPrizes(){
       : resolveCategory(c.teamsStr, c.ordered);
 
     const isTie = results.length > 1;
-    const shareAmount = isTie ? Math.floor(pr.amount / results.length) : pr.amount;
-    // Give any remainder from rounding to first winner
-    const remainder = isTie ? pr.amount - (shareAmount * results.length) : 0;
+    // Split to exact pennies — divide evenly with no rounding gaps
+    const shareAmount = isTie ? Math.round(pr.amount / results.length * 100) / 100 : pr.amount;
 
     const winnersHtml = results.map((res, i) => {
-      const amt = shareAmount + (i === 0 ? remainder : 0);
       return `<div style="margin-top:${i>0?'6px':'3px'}">
         <div class="prize-winner">${res.participant ? res.participant.name : 'No participant'}</div>
         <div class="prize-team">${res.team ? tf(res.team)+res.team : ''}</div>
         ${res.rolledOver ? `<div style="font-size:10px;color:var(--grey);font-style:italic">Rolled from ${tf(res.original)}${res.original}</div>` : ''}
-        ${isTie ? `<div style="font-size:11px;font-weight:700;color:var(--gold-dark);margin-top:1px">Shared — £${amt}</div>` : ''}
+        ${isTie ? `<div style="font-size:11px;font-weight:700;color:var(--gold-dark);margin-top:1px">Shared — ${fmt(shareAmount)}</div>` : ''}
       </div>`;
     }).join('');
 
     return `<div class="prize-card ${pr.cls}">
       <div class="prize-emoji">${pr.emoji}</div>
       <div class="prize-cat">${pr.label}${isTie?' <span style="font-size:9px;background:var(--gold-light);color:var(--gold-dark);padding:1px 5px;border-radius:3px;font-weight:700">TIE</span>':''}</div>
-      <div class="prize-amount">${isTie ? results.map((_,i)=>'£'+(shareAmount+(i===0?remainder:0))).join(' / ') : '£'+pr.amount}</div>
+      <div class="prize-amount">${isTie ? results.map(()=>fmt(shareAmount)).join(' / ') : fmt(pr.amount)}</div>
       ${winnersHtml}
     </div>`;
   }).join("");
@@ -754,8 +756,8 @@ function renderParticipants(){
     const rcTeamInner=state.firstRedCard?(state.firstRedCard.match(/\(([^)]+)\)/)?.[1]||""):"";
     const topTeams=parseTeams(state.topScorerTeam);
     const concTeams=parseTeams(state.mostConcededTeam);
-    const topShare=topTeams.length>1?Math.floor(prizes.topScorer.amount/topTeams.length):prizes.topScorer.amount;
-    const concShare=concTeams.length>1?Math.floor(prizes.conceded.amount/concTeams.length):prizes.conceded.amount;
+    const topShare=topTeams.length>1?Math.round(prizes.topScorer.amount/topTeams.length*100)/100:prizes.topScorer.amount;
+    const concShare=concTeams.length>1?Math.round(prizes.conceded.amount/concTeams.length*100)/100:prizes.conceded.amount;
     const isW=p.team===state.winner;
     const isR=p.team===state.runnerUp;
     const isG=topTeams.includes(p.team);
@@ -763,17 +765,17 @@ function renderParticipants(){
     const isRC=rcTeamInner&&p.team===rcTeamInner;
     const winnings=(isW?prizes.winner.amount:0)+(isR?prizes.runnerUp.amount:0)+(isG?topShare:0)+(isC?concShare:0)+(isRC?prizes.redCard.amount:0);
     const badges=[
-      isW?`<span class="pbadge bw">🏆 £${prizes.winner.amount}</span>`:"",
-      isR?`<span class="pbadge brr">🥈 £${prizes.runnerUp.amount}</span>`:"",
-      isG?`<span class="pbadge bg">⚽ £${topShare}${topTeams.length>1?' (shared)':''}</span>`:"",
-      isC?`<span class="pbadge bc">🔴 £${concShare}${concTeams.length>1?' (shared)':''}</span>`:"",
-      isRC?`<span class="pbadge brc">🟥 £${prizes.redCard.amount}</span>`:"",
+      isW?`<span class="pbadge bw">🏆 ${fmt(prizes.winner.amount)}</span>`:"",
+      isR?`<span class="pbadge brr">🥈 ${fmt(prizes.runnerUp.amount)}</span>`:"",
+      isG?`<span class="pbadge bg">⚽ ${fmt(topShare)}${topTeams.length>1?' (shared)':''}</span>`:"",
+      isC?`<span class="pbadge bc">🔴 ${fmt(concShare)}${concTeams.length>1?' (shared)':''}</span>`:"",
+      isRC?`<span class="pbadge brc">🟥 ${fmt(prizes.redCard.amount)}</span>`:"",
     ].filter(Boolean).join("");
     return `<div class="pcard ${isW?"pw":isR?"pr":""}">
       <div class="pavatar">${initials(p.name)}</div>
       <div class="pname">${p.name}</div>
       <div class="pteam">${tf(p.team)}${p.team}</div>
-      ${winnings?`<div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:var(--gold-dark);margin-top:6px">£${winnings} won</div>`:""}
+      ${winnings?`<div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:var(--gold-dark);margin-top:6px">${fmt(winnings)} won</div>`:""}
       ${badges?`<div class="pbadges">${badges}</div>`:""}
     </div>`;
   }).join("")+`</div>`;

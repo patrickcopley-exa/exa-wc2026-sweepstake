@@ -487,8 +487,17 @@ async function loadState(){
     if(state.groups?.length){ liveGroups = state.groups; }
     setSyncStatus("ok");
     renderAll();
-    // Re-render prizes from cached stats so prize breakdown is always up to date
-    if(state.statsData){ renderPrizes(); renderParticipants(); }
+    // Re-render prizes and stats from cached data so everything is up to date on load
+    if(state.statsData){
+      renderPrizes();
+      renderParticipants();
+      // If stats tab is currently active, render it too
+      if(document.getElementById("tab-stats")?.classList.contains("active")){
+        renderStats(state.statsData);
+        const u=document.getElementById("upd-stats");
+        if(u&&state.statsUpdated) u.textContent="Updated "+state.statsUpdated;
+      }
+    }
   } catch(e){
     setSyncStatus("offline");
     console.error("Could not load state:", e);
@@ -526,7 +535,22 @@ function switchTab(name){
   if(name==="scores")     { if(state.scores?.length){ renderScores(state.scores); document.getElementById("upd-scores").textContent=state.scoresUpdated?"Updated "+state.scoresUpdated:"Click Refresh"; } }
   if(name==="standings")  { if(state.groups?.length){ liveGroups=state.groups; renderStandings(liveGroups); document.getElementById("upd-standings").textContent=state.standingsUpdated?"Live — "+state.standingsUpdated:"Click Refresh"; } }
   if(name==="knockout")   buildBracket();
-  if(name==="stats")      { if(state.statsData){ renderStats(state.statsData); document.getElementById("upd-stats").textContent=state.statsUpdated?"Updated "+state.statsUpdated:"Click Refresh"; } }
+  if(name==="stats"){
+    if(state.statsData){
+      renderStats(state.statsData);
+      const us=document.getElementById("upd-stats");
+      if(us) us.textContent=state.statsUpdated?"Updated "+state.statsUpdated:"Click Refresh";
+    } else {
+      // No cached data yet — try loading from server first
+      loadState().then(()=>{
+        if(state.statsData){
+          renderStats(state.statsData);
+          const us=document.getElementById("upd-stats");
+          if(us) us.textContent=state.statsUpdated?"Updated "+state.statsUpdated:"Click Refresh to fetch live stats";
+        }
+      });
+    }
+  }
   if(name==="manage")     loadState();
 }
 
@@ -785,7 +809,13 @@ function renderParticipants(){
 }
 
 function renderSweepstake(){ renderPotBar(); renderPrizes(); renderPodium(); renderParticipants(); }
-function renderAll(){ renderSweepstake(); renderManage(); }
+function renderAll(){
+  renderSweepstake();
+  renderManage();
+  if(state.statsData && document.getElementById("tab-stats")?.classList.contains("active")){
+    renderStats(state.statsData);
+  }
+}
 
 /* ═══════════════════════════════════════════════
    MANAGE — no remove, locked in

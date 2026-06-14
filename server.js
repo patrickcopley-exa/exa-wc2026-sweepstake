@@ -186,9 +186,16 @@ app.get('/api/scores', async (req, res) => {
     const relevant = [...live, ...finished, ...upcoming];
 
     const NAME_MAP2 = {
-      'Korea Republic': 'South Korea', 'Czechia': 'Czech Republic',
-      'Bosnia and Herzegovina': 'Bosnia & Herz.', "Côte d'Ivoire": 'Ivory Coast',
-      'Ivory Coast': 'Ivory Coast', 'Turkey': 'Türkiye', 'Curacao': 'Curaçao',
+      'Korea Republic':        'South Korea',
+      'Czechia':               'Czech Republic',
+      'Bosnia and Herzegovina':'Bosnia & Herz.',
+      'Bosnia-H.':             'Bosnia & Herz.',
+      'Bosnia & Herzegovina':  'Bosnia & Herz.',
+      "Côte d'Ivoire":         'Ivory Coast',
+      'Ivory Coast':           'Ivory Coast',
+      'Turkey':                'Türkiye',
+      'Curacao':               'Curaçao',
+      'Congo DR':              'DR Congo',
     };
     const nn = n => NAME_MAP2[n] || n;
 
@@ -269,7 +276,7 @@ app.get('/api/stats', async (req, res) => {
     // Fetch all matches and scorers in parallel
     const [matchesRes, scorersRes] = await Promise.all([
       fetch('https://api.football-data.org/v4/competitions/WC/matches', { headers: { 'X-Auth-Token': apiKey } }),
-      fetch('https://api.football-data.org/v4/competitions/WC/scorers?limit=20', { headers: { 'X-Auth-Token': apiKey } })
+      fetch('https://api.football-data.org/v4/competitions/WC/scorers?limit=100', { headers: { 'X-Auth-Token': apiKey } })
     ]);
 
     if (!matchesRes.ok) {
@@ -290,9 +297,17 @@ app.get('/api/stats', async (req, res) => {
     const teamStats = {};
 
     const NAME_MAP = {
-      'Korea Republic': 'South Korea', 'Czechia': 'Czech Republic',
-      'Bosnia and Herzegovina': 'Bosnia & Herz.', "Côte d'Ivoire": 'Ivory Coast',
-      'Turkey': 'Türkiye', 'Curacao': 'Curaçao',
+      'Korea Republic':        'South Korea',
+      'Czechia':               'Czech Republic',
+      'Bosnia and Herzegovina':'Bosnia & Herz.',
+      'Bosnia-H.':             'Bosnia & Herz.',
+      'Bosnia & Herzegovina':  'Bosnia & Herz.',
+      "Côte d'Ivoire":         'Ivory Coast',
+      'Turkey':                'Türkiye',
+      'Curacao':               'Curaçao',
+      'Congo DR':              'DR Congo',
+      'DR Congo':              'DR Congo',
+      'Republic of Ireland':   'Ireland',
     };
     const nn = n => NAME_MAP[n] || n;
 

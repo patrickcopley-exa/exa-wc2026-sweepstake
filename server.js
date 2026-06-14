@@ -41,6 +41,8 @@ function writeLocal(state) {
   } catch(e) { console.error('writeLocal:', e.message); return false; }
 }
 
+const STATS_CACHE_VERSION = '2'; // bump to invalidate cached statsData
+
 async function readState() {
   const binId  = process.env.JSONBIN_BIN_ID;
   const apiKey = process.env.JSONBIN_API_KEY;
@@ -51,7 +53,16 @@ async function readState() {
       });
       if (r.ok) {
         const data = await r.json();
-        return { ...DEFAULT_STATE, ...data };
+        const state = { ...DEFAULT_STATE, ...data };
+        // Clear cached stats if version changed — forces fresh fetch with fixed names
+        if (state.statsCacheVersion !== STATS_CACHE_VERSION) {
+          state.statsData = null;
+          state.statsUpdated = '';
+          state.statsCacheVersion = STATS_CACHE_VERSION;
+          // Save the cleared state back so all devices get clean data
+          writeState(state).catch(() => {});
+        }
+        return state;
       }
     } catch(e) { console.error('JSONBin read error:', e.message); }
   }

@@ -472,11 +472,16 @@ async function loadState(){
     // This preserves baked entries when server is empty after redeploy
     const serverParticipants = data.participants || [];
     if(serverParticipants.length >= BAKED_PARTICIPANTS.length){
+      // Merge server data but preserve local statsData if server has none
+      const localStats = state.statsData;
       state = { ...state, ...data };
+      if(!state.statsData && localStats) state.statsData = localStats;
     } else {
       // Server is empty/behind — keep baked data, merge non-participant fields
       const { participants: _, ...rest } = data;
+      const localStats = state.statsData;
       state = { ...state, ...rest, participants: BAKED_PARTICIPANTS };
+      if(!state.statsData && localStats) state.statsData = localStats;
       // Push baked data up to server so it's saved there too
       fetch('/api/state', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -1010,30 +1015,33 @@ function renderStats(d){
   }
   if(d.totalMatches===0){h+='<div class="empty">No matches played yet — stats will appear once the tournament begins.</div>';c.innerHTML=h;return;}
   h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">`;
-  // Top scorers — group by team, sum goals
-  if(d.topScorers?.length){
-    // Aggregate goals per team
-    const teamGoals={};
-    d.topScorers.forEach(s=>{
-      if(!teamGoals[s.team]) teamGoals[s.team]={team:s.team,goals:0,players:[]};
-      teamGoals[s.team].goals+=s.goals;
-      teamGoals[s.team].players.push({name:s.player,goals:s.goals});
-    });
-    const teamList=Object.values(teamGoals).sort((a,b)=>b.goals-a.goals);
-    const maxG=Math.max(...teamList.map(t=>t.goals),1);
-    h+=`<div><div class="slabel">Top scoring teams</div><div class="twrap"><table class="tbl"><tbody>`;
-    teamList.slice(0,8).forEach(t=>{
-      const p=Math.round(t.goals/maxG*100);
-      const playerNames=t.players.sort((a,b)=>b.goals-a.goals).map(p=>`${p.name} (${p.goals})`).join(', ');
-      h+=`<tr>
-        <td style="white-space:nowrap">${tf(t.team)}${t.team}</td>
-        <td style="font-size:10px;color:var(--grey);overflow:hidden;text-overflow:ellipsis;max-width:140px">${playerNames}</td>
-        <td style="font-weight:700;text-align:right;width:24px">${t.goals}</td>
-        <td style="width:60px"><span class="bar-w"><span class="bar-f" style="width:${p}%"></span></span></td>
-      </tr>`;
-    });
-    h+=`</tbody></table></div></div>`;
-  } else if(d.goalsByTeam?.length){
+  // Top scoring teams — use goalsByTeam (from match results) as authoritative source
+  // then annotate with player names from topScorers where available
+  if(d.goalsByTeam?.length){
+    const scored = [...d.goalsByTeam].filter(t=>t.scored>0).sort((a,b)=>b.scored-a.scored||a.team.localeCompare(b.team));
+    if(scored.length){
+      // Build player lookup by team from topScorers
+      const playersByTeam={};
+      (d.topScorers||[]).forEach(s=>{
+        if(!playersByTeam[s.team]) playersByTeam[s.team]=[];
+        playersByTeam[s.team].push({name:s.player,goals:s.goals});
+      });
+      const maxG=Math.max(...scored.map(t=>t.scored),1);
+      h+=`<div><div class="slabel">Top scoring teams</div><div class="twrap"><table class="tbl"><tbody>`;
+      scored.slice(0,8).forEach(t=>{
+        const p=Math.round(t.scored/maxG*100);
+        const players=(playersByTeam[t.team]||[]).sort((a,b)=>b.goals-a.goals).map(p=>`${p.name} (${p.goals})`).join(', ');
+        h+=`<tr>
+          <td style="white-space:nowrap">${tf(t.team)}${t.team}</td>
+          <td style="font-size:10px;color:var(--grey);overflow:hidden;text-overflow:ellipsis;max-width:140px">${players||''}</td>
+          <td style="font-weight:700;text-align:right;width:24px">${t.scored}</td>
+          <td style="width:60px"><span class="bar-w"><span class="bar-f" style="width:${p}%"></span></span></td>
+        </tr>`;
+      });
+      h+=`</tbody></table></div></div>`;
+    }
+  }
+  if(false&&d.goalsByTeam?.length){// legacy fallback kept for structure
     const maxG=Math.max(...d.goalsByTeam.map(t=>t.scored),1);
     h+=`<div><div class="slabel">Most goals scored</div><div class="twrap"><table class="tbl"><tbody>`;
     [...d.goalsByTeam].sort((a,b)=>b.scored-a.scored).slice(0,6).forEach(t=>{const p=Math.round(t.scored/maxG*100);h+=`<tr><td style="white-space:nowrap">${tf(t.team)}${t.team}</td><td style="font-weight:700;text-align:right;width:24px">${t.scored}</td><td style="width:74px"><span class="bar-w"><span class="bar-f" style="width:${p}%"></span></span></td></tr>`;});

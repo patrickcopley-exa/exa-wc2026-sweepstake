@@ -1036,7 +1036,7 @@ function renderStats(d){
       });
       const maxG=Math.max(...scored.map(t=>t.scored),1);
       h+=`<div><div class="slabel">Top scoring teams</div><div class="twrap"><table class="tbl"><tbody>`;
-      scored.slice(0,8).forEach(t=>{
+      scored.forEach(t=>{
         const p=Math.round(t.scored/maxG*100);
         const teamPlayers=(playersByTeam[t.team]||[]).sort((a,b)=>b.goals-a.goals);
         const scorerTotal=teamPlayers.reduce((s,p)=>s+p.goals,0);

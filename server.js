@@ -318,20 +318,29 @@ app.get('/api/stats', async (req, res) => {
       .map(([team, s]) => ({ team, scored: s.scored, conceded: s.conceded }))
       .sort((a, b) => b.scored - a.scored || a.team.localeCompare(b.team));
 
-    // Top scorers from the scorers endpoint
-    const topScorers = (scorerData.scorers || []).slice(0, 10).map(s => ({
-      player: s.player?.name,
-      team:   nn(s.team?.shortName || s.team?.name),
-      goals:  s.goals
-    }));
+    // Top scorers — normalise team names to match our goalsByTeam
+    // Also add a teamGoals field so the grouped view matches totalGoals
+    const topScorers = (scorerData.scorers || []).slice(0, 20).map(s => {
+      const teamName = nn(s.team?.shortName || s.team?.name);
+      // Find this team's total in goalsByTeam for consistency
+      const teamTotal = goalsByTeam.find(t => t.team === teamName);
+      return {
+        player: s.player?.name,
+        team:   teamName,
+        goals:  s.goals,
+        teamTotalGoals: teamTotal?.scored ?? s.goals
+      };
+    });
 
+    // Also send goalsByTeam sorted so top scoring team is first — this is the
+    // authoritative source for prize calculation (derived from match results)
     res.json({
       ok: true,
       totalGoals,
       totalMatches,
       avgGoalsPerMatch: totalMatches > 0 ? (totalGoals / totalMatches).toFixed(2) : 0,
-      totalRedCards: null,   // not available on free tier
-      firstRedCard: null,    // not available on free tier
+      totalRedCards: null,
+      firstRedCard: null,
       goalsByTeam,
       topScorers
     });

@@ -1002,8 +1002,16 @@ async function fetchStats(){
 }
 function renderStats(d){
   const c=document.getElementById("stats-container");
+  // Recalculate from goalsByTeam so stat grid always matches the table below
+  const derivedTotalGoals = d.goalsByTeam?.length
+    ? d.goalsByTeam.reduce((s,t)=>s+t.scored, 0)
+    : d.totalGoals;
+  const derivedAvg = d.totalMatches > 0
+    ? (derivedTotalGoals / d.totalMatches).toFixed(1)
+    : '-';
+
   let h=`<div class="stat-grid">`;
-  [{l:"Total goals",v:d.totalGoals,accent:true},{l:"Matches played",v:d.totalMatches},{l:"Avg goals/game",v:d.avgGoalsPerMatch?Number(d.avgGoalsPerMatch).toFixed(1):"-"}].forEach(s=>{
+  [{l:"Total goals",v:derivedTotalGoals,accent:true},{l:"Matches played",v:d.totalMatches},{l:"Avg goals/game",v:derivedAvg}].forEach(s=>{
     h+=`<div class="stat-card" style="border-top:3px solid ${s.accent?"var(--gold)":"var(--grey-light)"}"><div class="stat-label">${s.l}</div><div class="stat-value">${s.v??"-"}</div></div>`;
   });
   h+=`</div>`;

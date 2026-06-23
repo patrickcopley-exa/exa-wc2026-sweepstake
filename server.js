@@ -129,7 +129,7 @@ app.post('/api/draw', async (req, res) => {
       return res.status(409).json({ ok: false, error: 'Team already taken — please try again' });
     }
 
-    state.participants.push({ name, team });
+    state.participants.push({ name, team, paid: false });
     const saved = await writeState(state);
     res.json({ ok: true, state: saved });
   } catch(err) {
